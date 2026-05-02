@@ -79,7 +79,27 @@ export default function LoginPage() {
     setIsLoading(true);
     try {
       const provider = new GoogleAuthProvider();
-      await signInWithPopup(auth, provider);
+      const userCred = await signInWithPopup(auth, provider);
+      
+      const { doc, getDoc, setDoc, serverTimestamp } = await import("firebase/firestore");
+      const { firestore } = await import("@/firebase");
+      
+      if (firestore) {
+        const userDocRef = doc(firestore, "users", userCred.user.uid);
+        const userDoc = await getDoc(userDocRef);
+        
+        if (!userDoc.exists()) {
+          await setDoc(userDocRef, {
+            uid: userCred.user.uid,
+            displayName: userCred.user.displayName || "Unknown_Operative",
+            email: userCred.user.email,
+            photoURL: userCred.user.photoURL,
+            role: "user",
+            createdAt: serverTimestamp()
+          });
+        }
+      }
+
       toast({ title: "ACCESS GRANTED", description: "Google authentication successful." });
       router.push("/dashboard");
     } catch (err: any) {
@@ -93,26 +113,23 @@ export default function LoginPage() {
   const handleBiometricAccess = async () => {
     if (!auth) return;
     setIsLoading(true);
-    const email = "admin@overwatch.com";
-    const password = "OVERWATCH_2026_MASTER";
+    const email = "test@gamesmith.io";
+    const password = "TEST_USER_2026";
 
     try {
-      // Attempt real sync first
       await signInWithEmailAndPassword(auth, email, password);
     } catch (e: any) {
-      // Auto-provision if missing
       if (e.code === 'auth/user-not-found' || e.code === 'auth/invalid-credential') {
         try {
           const userCred = await createUserWithEmailAndPassword(auth, email, password);
-          // Auto-create Firestore profile with Admin role
           const { doc, setDoc, serverTimestamp } = await import("firebase/firestore");
           const db = (await import("@/firebase")).firestore;
           if (db) {
             await setDoc(doc(db, "users", userCred.user.uid), {
               uid: userCred.user.uid,
               email: userCred.user.email,
-              displayName: "OVERWATCH_COMMANDER",
-              role: "admin",
+              displayName: "TEST_OPERATIVE",
+              role: "user",
               createdAt: serverTimestamp()
             });
           }
@@ -121,12 +138,12 @@ export default function LoginPage() {
         }
       }
     } finally {
-      localStorage.setItem("OVERWATCH_MASTER_SESSION", "true");
+      localStorage.removeItem("OVERWATCH_MASTER_SESSION");
       toast({ 
-        title: "BIOMETRIC_OVERRIDE_SUCCESS", 
-        description: "Master identity synchronized. Access Level: 5." 
+        title: "RAPID_TEST_ACCESS", 
+        description: "Test identity synchronized. Access Level: Standard." 
       });
-      router.push("/admin");
+      router.push("/dashboard");
       setIsLoading(false);
     }
   };

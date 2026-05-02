@@ -79,7 +79,27 @@ export function AuthModal({ isOpen, onOpenChange }: AuthModalProps) {
     setIsLoading(true);
     try {
       const provider = new GithubAuthProvider();
-      await signInWithPopup(auth, provider);
+      const userCred = await signInWithPopup(auth, provider);
+      
+      const { doc, getDoc, setDoc, serverTimestamp } = await import("firebase/firestore");
+      const { firestore } = await import("@/firebase");
+      
+      if (firestore) {
+        const userDocRef = doc(firestore, "users", userCred.user.uid);
+        const userDoc = await getDoc(userDocRef);
+        
+        if (!userDoc.exists()) {
+          await setDoc(userDocRef, {
+            uid: userCred.user.uid,
+            displayName: userCred.user.displayName || "Unknown_Operative",
+            email: userCred.user.email,
+            photoURL: userCred.user.photoURL,
+            role: "user",
+            createdAt: serverTimestamp()
+          });
+        }
+      }
+
       onOpenChange(false);
       toast({ title: "ACCESS GRANTED", description: "GitHub authentication successful." });
     } catch (err) {
