@@ -22,29 +22,17 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
-import { blueprintFlow } from "@/ai/blueprint-flow";
+import { blueprintFlow, BLUEPRINT_CATALOG } from "@/ai/blueprint-flow";
 import { validateBlueprintFlow } from "@/ai/validate-flow";
 import { useToast } from "@/hooks/use-toast";
 import { useFirestore, useAuth, useUser } from "@/firebase";
 import { saveBlueprint } from "@/lib/firestore-service";
 import { useBlueprints } from "@/hooks/use-blueprints";
 
-const CATALOG: Record<string, any> = {
-  START: { category: "Events", type: "START", label: "BeginPlay", color: "#dc2626", description: "Fires once when actor spawns.", inputs: [], outputs: [{ id: "exec", label: "Exec", kind: "exec" }] },
-  EVENT_TICK: { category: "Events", type: "EVENT_TICK", label: "Event Tick", color: "#dc2626", description: "Fires every frame.", inputs: [], outputs: [{ id: "exec", label: "Exec", kind: "exec" }, { id: "delta", label: "Delta Seconds", kind: "float" }] },
-  SEQUENCE: { category: "Flow Control", type: "SEQUENCE", label: "Sequence", color: "#808080", description: "Executes pins in order.", inputs: [{ id: "in", label: "Exec", kind: "exec" }], outputs: [{ id: "0", label: "Then 0", kind: "exec" }, { id: "1", label: "Then 1", kind: "exec" }] },
-  BRANCH: { category: "Flow Control", type: "BRANCH", label: "Branch", color: "#808080", description: "If/Else conditional.", inputs: [{ id: "in", label: "Exec", kind: "exec" }, { id: "cond", label: "Condition", kind: "bool" }], outputs: [{ id: "t", label: "True", kind: "exec" }, { id: "f", label: "False", kind: "exec" }] },
-  DELAY: { category: "Flow Control", type: "DELAY", label: "Delay", color: "#808080", description: "Pauses for N seconds.", inputs: [{ id: "in", label: "Exec", kind: "exec" }, { id: "d", label: "Duration", kind: "float" }], outputs: [{ id: "out", label: "Completed", kind: "exec" }] },
-  PLUS_FLOAT: { category: "Math", type: "PLUS_FLOAT", label: "Add (Float)", color: "#22c55e", description: "A + B.", inputs: [{ id: "a", label: "A", kind: "float" }, { id: "b", label: "B", kind: "float" }], outputs: [{ id: "sum", label: "Result", kind: "float" }] },
-  LERP: { category: "Math", type: "LERP", label: "Lerp", color: "#22c55e", description: "Linear interpolation.", inputs: [{ id: "a", label: "A", kind: "float" }, { id: "b", label: "B", kind: "float" }, { id: "alpha", label: "Alpha", kind: "float" }], outputs: [{ id: "res", label: "Result", kind: "float" }] },
-  SET_LOC: { category: "Utilities", type: "SET_LOC", label: "SetActorLocation", color: "#3b82f6", description: "Moves actor in world.", inputs: [{ id: "in", label: "Exec", kind: "exec" }, { id: "new_loc", label: "New Location", kind: "vector" }], outputs: [{ id: "out", label: "Exec", kind: "exec" }] },
-  AI_MOVE_TO: { category: "AI", type: "AI_MOVE_TO", label: "AI Move To", color: "#6366f1", description: "Moves AI pawn to destination.", inputs: [{ id: "in", label: "Exec", kind: "exec" }, { id: "pawn", label: "Pawn", kind: "object" }, { id: "dest", label: "Destination", kind: "vector" }], outputs: [{ id: "success", label: "On Success", kind: "exec" }, { id: "fail", label: "On Fail", kind: "exec" }] },
-  ADD_MOVEMENT_INPUT: { category: "Movement", type: "ADD_MOVEMENT_INPUT", label: "Add Movement Input", color: "#eab308", description: "Applies directional movement.", inputs: [{ id: "in", label: "Exec", kind: "exec" }, { id: "dir", label: "World Direction", kind: "vector" }, { id: "scale", label: "Scale Value", kind: "float" }], outputs: [{ id: "out", label: "Exec", kind: "exec" }] },
-  ADD_IMPULSE: { category: "Physics", type: "ADD_IMPULSE", label: "Add Impulse", color: "#f97316", description: "Applies physics force.", inputs: [{ id: "in", label: "Exec", kind: "exec" }, { id: "imp", label: "Impulse", kind: "vector" }], outputs: [{ id: "out", label: "Exec", kind: "exec" }] },
-  SPAWN_ACTOR: { category: "Gameplay", type: "SPAWN_ACTOR", label: "SpawnActorFromClass", color: "#0d9488", description: "Creates actor entity.", inputs: [{ id: "in", label: "Exec", kind: "exec" }, { id: "tr", label: "Transform", kind: "transform" }], outputs: [{ id: "out", label: "Exec", kind: "exec" }, { id: "act", label: "Actor", kind: "object" }] },
-  APPLY_DAMAGE: { category: "Gameplay", type: "APPLY_DAMAGE", label: "Apply Damage", color: "#0d9488", description: "Deals damage.", inputs: [{ id: "in", label: "Exec", kind: "exec" }, { id: "act", label: "Victim", kind: "object" }, { id: "amt", label: "Amount", kind: "float" }], outputs: [{ id: "out", label: "Exec", kind: "exec" }] },
-  CAMERA_SHAKE: { category: "Camera", type: "CAMERA_SHAKE", label: "StartCameraShake", color: "#0891b2", description: "Triggers shake FX.", inputs: [{ id: "in", label: "Exec", kind: "exec" }, { id: "scale", label: "Scale", kind: "float" }], outputs: [{ id: "out", label: "Exec", kind: "exec" }] },
-};
+
+// Use the shared catalog exported from blueprint-flow.ts
+const CATALOG: Record<string, any> = BLUEPRINT_CATALOG;
+
 
 export default function PlaygroundPage() {
   const [prompt, setPrompt] = useState("");

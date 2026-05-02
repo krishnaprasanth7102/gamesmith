@@ -303,55 +303,106 @@ export function BlueprintPlayground() {
     setPanOffset({ x: window.innerWidth / 3, y: 100 });
   };
 
-  // ─── AI Generation Function ──────────────────────────────────────────────────
+  // ─── AI Generation via Puter.js Anonymous Mode (no login, no API key) ────────
   const handleAIGenerate = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
     if (!promptText.trim() || isGenerating) return;
 
     setSimRunning(false);
     setIsGenerating(true);
-    
+
+    const catalogInstructions = Object.keys(CATALOG).map(key => {
+      const item = CATALOG[key];
+      const ins = item.inputs.map((p: Port) => p.id).join(", ") || "none";
+      const outs = item.outputs.map((p: Port) => p.id).join(", ") || "none";
+      return `- ${key}: ${item.description} (In: ${ins} | Out: ${outs})`;
+    }).join("\n");
+
+    const prompt = `Act as an expert Unreal Engine 5 Blueprint Developer. Convert the user request into a visual Blueprint node graph.
+
+STRICT RULES:
+- ONLY use node types from the catalog below. NEVER invent new types.
+- Always start with START or EVENT_TICK.
+- Spread nodes ~300px apart horizontally (x: 100, 400, 700...). Keep y between 100–300.
+- Every connection must reference valid node ids AND valid port ids from the catalog.
+- Output ONLY raw JSON. No markdown. No explanation outside the JSON.
+
+AVAILABLE NODES:
+${catalogInstructions}
+
+Return this EXACT JSON structure:
+{
+  "nodes": [{ "id": "n1", "type": "NODE_TYPE", "x": 100, "y": 150 }],
+  "connections": [{ "id": "c1", "fromNode": "n1", "fromPort": "PORT_ID", "toNode": "n2", "toPort": "PORT_ID" }],
+  "message": "One sentence summary.",
+  "explanations": [{ "nodeId": "n1", "explanation": "Why this node is placed here." }],
+  "tutorial": ["Step 1: ...", "Step 2: ..."],
+  "unrealBlueprint": "BEGIN OBJECT\\nClass=...\\nEND OBJECT"
+}
+
+My Request: "${promptText}"`;
+
     try {
-      const response = await fetch('/api/generate-blueprint', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ prompt: promptText }),
+      const puter = (window as any).puter;
+      if (!puter) throw new Error("Puter.js not loaded yet. Please refresh the page.");
+
+      // Anonymous mode — no login popup required
+      const response = await puter.ai.chat(prompt, {
+        model: 'qwen/qwen3-235b-a22b',
+        temperature: 0.1,
       });
 
-      if (!response.ok) throw new Error('Generation failed');
+      const rawText: string = typeof response === "string"
+        ? response
+        : response?.message?.content ?? String(response ?? "");
 
-      const data = await response.json();
-      
-      if (data.nodes && data.connections) {
-        setNodes(data.nodes);
-        setConnections(data.connections);
-        
-        const generatedExplanations = data.explanations?.map((e: any, i: number) => ({
-           nodeId: e.nodeId,
-           title: data.nodes.find((n:any) => n.id === e.nodeId)?.label || `Step ${i + 1}`,
-           text: e.explanation
-        })) || [];
-        
-        setLearnSteps(generatedExplanations);
-        setTutorialSteps(data.tutorial || []);
-        setUnrealCode(data.unrealBlueprint || "");
-        
-        setLogs([`[AI] Generated logic for: "${promptText}". ${data.summary || ''}`]);
-        setPanOffset({ x: window.innerWidth / 3, y: 150 });
-        setScale(1);
-        if (generatedExplanations.length > 0) {
-           setLearnMode(true);
-           setLearnStep(0);
-        }
+      // Safe JSON extraction — handles accidental markdown from the model
+      const cleanJSON = rawText
+        .replace(/```json\s*/g, '')
+        .replace(/```\s*$/g, '')
+        .trim();
+
+      const output = JSON.parse(cleanJSON);
+
+      // Enrich nodes from catalog, silently drop hallucinated types
+      const enrichedNodes = (output.nodes || [])
+        .filter((n: any) => CATALOG[n.type])
+        .map((n: any) => ({ ...CATALOG[n.type], id: n.id, x: n.x, y: n.y }));
+
+      const validNodeIds = new Set(enrichedNodes.map((n: any) => n.id));
+      const validConnections = (output.connections || []).filter((c: any) =>
+        validNodeIds.has(c.fromNode) && validNodeIds.has(c.toNode)
+      );
+
+      setNodes(enrichedNodes);
+      setConnections(validConnections);
+
+      const generatedExplanations = (output.explanations || []).map((ex: any, i: number) => ({
+        nodeId: ex.nodeId,
+        title: enrichedNodes.find((n: any) => n.id === ex.nodeId)?.label || `Step ${i + 1}`,
+        text: ex.explanation,
+      }));
+
+      setLearnSteps(generatedExplanations);
+      setTutorialSteps(output.tutorial || []);
+      setUnrealCode(output.unrealBlueprint || "");
+      setLogs([`[Puter AI] Generated: "${promptText}". ${output.message || ""}`]);
+      setPanOffset({ x: window.innerWidth / 3, y: 150 });
+      setScale(1);
+
+      if (generatedExplanations.length > 0) {
+        setLearnMode(true);
+        setLearnStep(0);
       }
     } catch (err: any) {
       console.error(err);
-      setLogs([`[Error] AI failed to synthesize logic: ${err.message}`]);
+      setLogs([`[Error] Puter AI failed: ${err.message}`]);
     } finally {
       setIsGenerating(false);
       setPromptText("");
     }
   };
+
 
   // Engine Simulation loop
   const runSim = useCallback(async () => {
