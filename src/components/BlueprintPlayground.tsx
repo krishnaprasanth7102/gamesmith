@@ -61,34 +61,9 @@ const CATALOG: Record<string, Omit<BPNode, "id" | "x" | "y">> = {
   COMPARE_FLOAT:{ category: "Math", type: "COMPARE_FLOAT",label: "COMPARE FLOAT",         color: "#22c55e", description: "Compares float A against float B.",                                                                                    inputs: [{ id: "a", label: "A", kind: "float" }, { id: "b", label: "B", kind: "float" }], outputs: [{ id: "exec", label: "Exec", kind: "exec" }, { id: "greater", label: ">", kind: "exec"}, { id: "equal", label: "==", kind: "exec"}, { id: "less", label: "<", kind: "exec"}] },
 };
 
-const INITIAL_NODES: BPNode[] = [
-  { id: "n1", ...CATALOG.START,         x: -100,  y: 190 },
-  { id: "n2", ...CATALOG.EVENT_TICK,    x: -100,  y: 330 },
-  { id: "n3", ...CATALOG.GET_HEALTH,    x: -160, y: 480 },
-  { id: "n4", ...CATALOG.COMPARE_FLOAT, x: 180, y: 400 },
-  { id: "n5", ...CATALOG.BRANCH,        x: 480, y: 300 },
-  { id: "n6", ...CATALOG.INCREASE_DIFF, x: 800, y: 210 },
-  { id: "n7", ...CATALOG.DECREASE_DIFF, x: 800, y: 390 },
-];
+const INITIAL_NODES: BPNode[] = [];
+const INITIAL_CONNS: Connection[] = [];
 
-const INITIAL_CONNS: Connection[] = [
-  { id: "c1", fromNode: "n2", fromPort: "exec",      toNode: "n4", toPort: "a" },
-  { id: "c2", fromNode: "n3", fromPort: "health",    toNode: "n4", toPort: "a" },
-  { id: "c3", fromNode: "n2", fromPort: "exec",      toNode: "n5", toPort: "exec_in" },
-  { id: "c4", fromNode: "n4", fromPort: "less",      toNode: "n5", toPort: "exec_in" }, // Fake routing for demp
-  { id: "c5", fromNode: "n5", fromPort: "true",      toNode: "n6", toPort: "exec_in" },
-  { id: "c6", fromNode: "n5", fromPort: "false",     toNode: "n7", toPort: "exec_in" },
-];
-
-const LEARN_STEPS = [
-  { nodeId: "n1", title: "START Node",           text: "Every boss AI graph starts here — equivalent to Begin Play in Unreal. Fires once." },
-  { nodeId: "n2", title: "Event Tick",            text: "Fires every frame. This drives continuous checking for the boss 'awareness'." },
-  { nodeId: "n4", title: "Compare Float",         text: "Math node! We compare the Player Health against a fixed internal value to see if they are doing well." },
-  { nodeId: "n5", title: "Branch (If / Else)",    text: "The core decision gate. Routes execution logic based on boolean conditions." },
-  { nodeId: "n6", title: "Increase Difficulty",   text: "Triggers when player is struggling. Boss speeds up." },
-];
-
-// Combine groups
 const TOOLBAR_GROUPS = Object.entries(CATALOG).reduce((acc, [key, val]) => {
   if (!acc[val.category]) acc[val.category] = [];
   acc[val.category].push(val);
@@ -164,11 +139,12 @@ export function BlueprintPlayground() {
   const [logs, setLogs] = useState<string[]>([]);
 
   // Learn Mode
+  const [learnSteps, setLearnSteps] = useState<{nodeId: string, title: string, text: string}[]>([]);
+  const [tutorialSteps, setTutorialSteps] = useState<string[]>([]);
+  const [unrealCode, setUnrealCode] = useState<string>("");
   const [learnMode, setLearnMode] = useState(false);
   const [learnStep, setLearnStep] = useState(0);
-
-  // Context Menu
-  const [contextMenu, setContextMenu] = useState<{x: number, y: number, cx: number, cy: number} | null>(null);
+  const [showTutorial, setShowTutorial] = useState(false);
 
   const canvasRef = useRef<HTMLDivElement>(null);
   const dragRef = useRef<{ nodeId: string; smx: number; smy: number; nx: number; ny: number } | null>(null);
@@ -196,16 +172,15 @@ export function BlueprintPlayground() {
   // Keyboard events
   useEffect(() => {
     const kd = (e: KeyboardEvent) => {
-      if ((e.key === "Delete" || e.key === "Backspace") && selectedId && !contextMenu) {
+      if ((e.key === "Delete" || e.key === "Backspace") && selectedId) {
         setNodes(prev => prev.filter(n => n.id !== selectedId));
         setConnections(prev => prev.filter(c => c.fromNode !== selectedId && c.toNode !== selectedId));
         setSelectedId(null);
       }
-      if (e.key === "Escape") setContextMenu(null);
     };
     window.addEventListener("keydown", kd);
     return () => window.removeEventListener("keydown", kd);
-  }, [selectedId, contextMenu]);
+  }, [selectedId]);
 
   // Global mouse handlers
   useEffect(() => {
@@ -235,7 +210,6 @@ export function BlueprintPlayground() {
   // Canvas Interactions
   const handleCanvasMD = (e: React.MouseEvent) => {
     if (e.button === 0) {
-      if (contextMenu) setContextMenu(null);
       const target = e.target as HTMLElement;
       if (target.closest("[data-node]") || target.closest("[data-port]")) return;
       setSelectedId(null);
@@ -246,15 +220,12 @@ export function BlueprintPlayground() {
 
   const handleCanvasContextMenu = (e: React.MouseEvent) => {
     e.preventDefault();
-    const pos = toCanvas(e.clientX, e.clientY);
-    setContextMenu({ x: e.clientX, y: e.clientY, cx: pos.x, cy: pos.y });
   };
 
   // Node & Port Interactions
   const handleNodeMD = (nodeId: string, e: React.MouseEvent) => {
     if (e.button !== 0) return;
     e.stopPropagation();
-    if (contextMenu) setContextMenu(null);
     setSelectedId(nodeId);
     const n = nodesRef.current.find(x => x.id === nodeId)!;
     dragRef.current = { nodeId, smx: e.clientX, smy: e.clientY, nx: n.x, ny: n.y };
@@ -291,7 +262,6 @@ export function BlueprintPlayground() {
     const spawnY = cy ?? (-panOffsetRef.current.y + (canvasRef.current?.clientHeight ?? 400) / 2) / scaleRef.current;
     
     setNodes(prev => [...prev, { id: `n_${Date.now()}`, ...def, x: spawnX, y: spawnY }]);
-    setContextMenu(null);
   };
 
   // Zooming
@@ -355,9 +325,24 @@ export function BlueprintPlayground() {
       if (data.nodes && data.connections) {
         setNodes(data.nodes);
         setConnections(data.connections);
+        
+        const generatedExplanations = data.explanations?.map((e: any, i: number) => ({
+           nodeId: e.nodeId,
+           title: data.nodes.find((n:any) => n.id === e.nodeId)?.label || `Step ${i + 1}`,
+           text: e.explanation
+        })) || [];
+        
+        setLearnSteps(generatedExplanations);
+        setTutorialSteps(data.tutorial || []);
+        setUnrealCode(data.unrealBlueprint || "");
+        
         setLogs([`[AI] Generated logic for: "${promptText}". ${data.summary || ''}`]);
         setPanOffset({ x: window.innerWidth / 3, y: 150 });
         setScale(1);
+        if (generatedExplanations.length > 0) {
+           setLearnMode(true);
+           setLearnStep(0);
+        }
       }
     } catch (err: any) {
       console.error(err);
@@ -441,63 +426,85 @@ export function BlueprintPlayground() {
   }, [connections, simRunning]);
 
   const selectedNode = nodes.find(n => n.id === selectedId) ?? null;
-  const learnHighlight = learnMode ? LEARN_STEPS[learnStep]?.nodeId : null;
+  const learnHighlight = learnMode ? learnSteps[learnStep]?.nodeId : null;
+
+  const downloadBP = () => {
+    const blob = new Blob([unrealCode || "No blueprint content generated."], { type: "text/plain" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "GameSmith_Blueprint.txt";
+    a.click();
+    URL.revokeObjectURL(url);
+  };
 
   return (
-    <section id="playground" className="min-h-screen bg-black border-y border-white/10 relative overflow-hidden flex flex-col">
+    <section id="playground" className="min-h-screen bg-black border-y border-white/10 relative overflow-x-hidden flex flex-col w-full">
       <style>{`@keyframes blink{0%,100%{opacity:1}50%{opacity:0.6}}`}</style>
 
       {/* Editor Header */}
       <div className="border-b border-white/10 bg-black relative z-20 shrink-0">
-        <div className="max-w-7xl mx-auto px-6 py-6 flex items-center justify-between gap-6">
-          <div className="flex items-center gap-4">
-            <div className="p-3 bg-red-600 rounded">
-              <Compass className="size-6 text-white" />
+        <div className="px-3 sm:px-6 py-3 sm:py-5 flex flex-col gap-3">
+          {/* Title row */}
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex items-center gap-3">
+              <div className="p-2 sm:p-3 bg-red-600 rounded shrink-0">
+                <Compass className="size-4 sm:size-5 text-white" />
+              </div>
+              <div className="min-w-0">
+                <h2 className="text-base sm:text-xl font-black tracking-tight uppercase leading-none">Blueprint Playground</h2>
+                <p className="text-white/40 text-[10px] font-mono mt-0.5 hidden sm:block">Unreal Engine visual logic node simulator.</p>
+              </div>
             </div>
-            <div>
-              <h2 className="text-xl font-black tracking-tight uppercase leading-none">Blueprint Playground</h2>
-              <p className="text-white/40 text-[11px] font-mono mt-1">A high-fidelity Unreal Engine visual logic node simulator.</p>
+            {/* Action buttons row */}
+            <div className="flex flex-wrap gap-1.5 shrink-0">
+            {learnSteps.length > 0 && (
+              <button onClick={() => { setLearnMode(!learnMode); setLearnStep(0); }} className={cn("flex items-center gap-2 px-4 py-2 font-black text-[10px] uppercase tracking-widest border transition-all rounded-sm", learnMode ? "bg-white text-black border-white" : "border-white/20 text-white/70 hover:border-red-600 hover:text-white")}>
+                <BookOpen size={14} /> Explanations
+              </button>
+            )}
+            {tutorialSteps.length > 0 && (
+              <button onClick={() => setShowTutorial(true)} className="flex items-center gap-2 px-4 py-2 font-black text-[10px] uppercase tracking-widest border border-white/20 text-white/70 hover:border-red-600 hover:text-white transition-all rounded-sm">
+                <ListTree size={14} /> Full Tutorial
+              </button>
+            )}
+            {unrealCode && (
+              <button onClick={downloadBP} className="flex items-center gap-2 px-4 py-2 font-black text-[10px] uppercase tracking-widest border border-white/20 text-white/70 hover:border-blue-500 hover:text-white transition-all rounded-sm">
+                <Code size={14} /> Download UE Script
+              </button>
+            )}
+            <button onClick={resetGraph} className="flex items-center gap-2 px-4 py-2 font-black text-[10px] uppercase tracking-widest border border-white/20 text-white/70 hover:border-red-600 hover:text-white transition-all rounded-sm">
+              <RotateCcw size={14} /> Reset
+            </button>
             </div>
           </div>
-          
+
           {/* AI Generator Search Bar */}
-          <form onSubmit={handleAIGenerate} className="flex-1 max-w-lg mx-6 hidden lg:block">
+          <form onSubmit={handleAIGenerate} className="w-full">
             <div className="relative group">
               <div className={cn("absolute -inset-0.5 bg-gradient-to-r from-red-600 to-purple-600 rounded-sm opacity-20 group-hover:opacity-40 transition duration-500 blur", isGenerating && "animate-pulse opacity-60")}></div>
               <div className="relative flex items-center bg-black border border-white/10 rounded-sm overflow-hidden">
-                <div className={cn("pl-3 opacity-70", isGenerating ? "animate-spin text-purple-400" : "animate-pulse text-red-500")}>
-                  <Sparkles size={16} />
+                <div className={cn("pl-3 opacity-70 shrink-0", isGenerating ? "animate-spin text-purple-400" : "animate-pulse text-red-500")}>
+                  <Sparkles size={14} />
                 </div>
-                <input 
-                  type="text" 
+                <input
+                  type="text"
                   value={promptText}
                   onChange={e => setPromptText(e.target.value)}
-                  placeholder="Prompt AI to generate a boss mechanic..." 
-                  className="w-full bg-transparent border-none py-2 px-3 text-xs font-mono text-white placeholder:text-white/30 focus:outline-none focus:ring-0"
+                  placeholder="Prompt AI to generate a boss mechanic..."
+                  className="w-full min-w-0 bg-transparent border-none py-2.5 px-3 text-xs font-mono text-white placeholder:text-white/30 focus:outline-none focus:ring-0"
                   disabled={isGenerating}
                 />
-                <button 
+                <button
                   type="submit"
-                  disabled={isGenerating || !promptText.trim()} 
-                  className="px-4 py-2 bg-white/5 hover:bg-white/10 disabled:hover:bg-white/5 text-white/80 font-black text-[10px] uppercase tracking-widest border-l border-white/10 disabled:opacity-30 transition-colors shrink-0"
+                  disabled={isGenerating || !promptText.trim()}
+                  className="px-3 py-2.5 bg-white/5 hover:bg-white/10 disabled:hover:bg-white/5 text-white/80 font-black text-[10px] uppercase tracking-widest border-l border-white/10 disabled:opacity-30 transition-colors shrink-0 whitespace-nowrap"
                 >
-                  {isGenerating ? "Thinking..." : "Generate"}
+                  {isGenerating ? "..." : "Generate"}
                 </button>
               </div>
             </div>
           </form>
-
-          <div className="flex gap-2 shrink-0">
-            <button onClick={() => { setLearnMode(!learnMode); setLearnStep(0); }} className={cn("flex items-center gap-2 px-4 py-2 font-black text-[10px] uppercase tracking-widest border transition-all rounded-sm", learnMode ? "bg-white text-black border-white" : "border-white/20 text-white/70 hover:border-red-600 hover:text-white")}>
-              <BookOpen size={14} /> Guided Tutorial
-            </button>
-            <button onClick={resetGraph} className="flex items-center gap-2 px-4 py-2 font-black text-[10px] uppercase tracking-widest border border-white/20 text-white/70 hover:border-red-600 hover:text-white transition-all rounded-sm">
-              <RotateCcw size={14} /> Reset
-            </button>
-            <button onClick={runSim} disabled={simRunning} className={cn("flex items-center gap-2 px-6 py-2 font-black text-[10px] uppercase tracking-widest transition-all rounded-sm", simRunning ? "bg-red-600/20 text-red-600 cursor-wait animate-pulse border border-red-600/50" : "bg-red-600 text-white hover:bg-white hover:text-black border border-transparent")}>
-              <Play size={14} /> {simRunning ? "Simulating..." : "Run Sequence"}
-            </button>
-          </div>
         </div>
       </div>
 
@@ -508,43 +515,31 @@ export function BlueprintPlayground() {
          </div>
       )}
 
-      <div className="flex flex-1 min-h-[700px] relative">
-        
-        {/* Modern Sidebar Palette */}
-        <div className="w-[260px] shrink-0 border-r border-white/10 bg-[#0a0a0a] flex flex-col z-20">
-          <div className="p-4 border-b border-white/5 bg-black">
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-white/30" />
-              <input type="text" placeholder="Search Nodes..." className="w-full bg-white/5 border border-white/10 rounded-sm py-2 pl-9 pr-4 text-xs font-mono focus:outline-none focus:border-red-600 text-white placeholder:text-white/30" />
+      {showTutorial && (
+        <div className="absolute inset-0 bg-black/90 backdrop-blur-md z-50 flex items-center justify-center p-6">
+          <div className="bg-[#111] border border-white/20 w-full max-w-3xl max-h-[80vh] overflow-y-auto rounded-lg shadow-2xl flex flex-col">
+            <div className="flex justify-between items-center p-6 border-b border-white/10 sticky top-0 bg-[#111] z-10">
+              <h3 className="text-2xl font-black uppercase text-white tracking-widest">Step-By-Step Tutorial</h3>
+              <button onClick={() => setShowTutorial(false)} className="text-white/50 hover:text-white"><X size={24} /></button>
+            </div>
+            <div className="p-8 space-y-6">
+              {tutorialSteps.map((step, idx) => (
+                 <div key={idx} className="flex gap-4 items-start">
+                    <div className="bg-red-600/20 text-red-500 font-mono font-bold w-10 h-10 rounded-full flex items-center justify-center shrink-0 border border-red-600/30">
+                      {idx + 1}
+                    </div>
+                    <div className="text-white/80 leading-relaxed text-lg pt-1">
+                      {step}
+                    </div>
+                 </div>
+              ))}
             </div>
           </div>
-          
-          <div className="flex-1 overflow-y-auto px-2 py-4 space-y-4">
-            {Object.entries(TOOLBAR_GROUPS).map(([category, items]) => (
-              <div key={category}>
-                <div className="flex items-center gap-2 px-2 mb-2">
-                  <ListTree size={12} className="text-white/40" />
-                  <span className="text-[10px] uppercase tracking-widest font-black text-white/60">{category}</span>
-                </div>
-                <div className="flex flex-col gap-1">
-                  {items.map(item => (
-                    <button 
-                      key={item.type} 
-                      onClick={() => addNode(item.type)}
-                      className="flex items-center gap-3 px-3 py-2 text-left rounded hover:bg-white/5 border border-transparent hover:border-white/10 transition-all group"
-                    >
-                      <div className="size-4 rounded-sm" style={{ backgroundColor: item.color }} />
-                      <div className="flex-1">
-                        <div className="text-[11px] font-bold text-white group-hover:text-red-500 transition-colors uppercase tracking-wider">{item.label}</div>
-                      </div>
-                      <Plus size={12} className="text-white/20 group-hover:text-white/80 opacity-0 group-hover:opacity-100 transition-opacity" />
-                    </button>
-                  ))}
-                </div>
-              </div>
-            ))}
-          </div>
         </div>
+      )}
+
+      <div className="flex flex-1 min-h-[700px] relative">
+
 
         {/* Canvas System */}
         <div
@@ -665,34 +660,12 @@ export function BlueprintPlayground() {
             })}
           </div>
 
-          {/* Context Menu Overlay */}
-          {contextMenu && (
-            <div 
-              className="absolute z-50 w-56 bg-[#18181b] border border-white/10 shadow-2xl rounded-md overflow-hidden" 
-              style={{ left: contextMenu.x, top: contextMenu.y }}
-            >
-              <div className="bg-black/50 px-3 py-2 border-b border-white/5 text-[10px] font-black text-white/50 uppercase tracking-widest">
-                Spawn Node
-              </div>
-              <div className="max-h-64 overflow-y-auto p-1">
-                {Object.values(CATALOG).map(node => (
-                  <button 
-                    key={node.type} 
-                    onClick={() => addNode(node.type, contextMenu.cx, contextMenu.cy)}
-                    className="w-full text-left px-3 py-2 text-xs font-bold text-white/80 hover:text-white hover:bg-white/10 rounded-sm transition-colors flex items-center gap-2"
-                  >
-                    <div className="size-2 rounded-full" style={{backgroundColor: node.color}} />
-                    {node.label}
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
+          {/* No Context Menu for GameSmith */}
 
           {/* Overlays / Widgets */}
           
           {/* Zoom Controls */}
-          <div className="absolute top-6 right-6 flex flex-col gap-1 bg-black/80 backdrop-blur-md border border-white/10 p-1 rounded z-30">
+          <div className="absolute top-4 right-4 sm:top-6 sm:right-6 flex flex-col gap-1 bg-black/80 backdrop-blur-md border border-white/10 p-1 rounded z-30">
             <button onClick={() => handleZoom(1.2)} className="p-2 text-white/60 hover:text-white hover:bg-white/10 rounded transition-colors"><Plus size={16} /></button>
             <div className="text-[9px] font-mono text-center text-white/40 font-bold py-1 select-none">{Math.round(scale * 100)}%</div>
             <button onClick={() => handleZoom(0.8)} className="p-2 text-white/60 hover:text-white hover:bg-white/10 rounded transition-colors"><Minus size={16} /></button>
@@ -700,7 +673,7 @@ export function BlueprintPlayground() {
 
           {/* Simulation Output Logger */}
           {simVars && (
-            <div className="absolute bottom-6 right-6 w-72 flex flex-col gap-4 z-30 pointer-events-none">
+            <div className="absolute bottom-4 right-4 sm:bottom-6 sm:right-6 w-[280px] sm:w-72 flex flex-col gap-4 z-30 pointer-events-none">
               
               {/* Output Log */}
               {logs.length > 0 && (
@@ -737,7 +710,7 @@ export function BlueprintPlayground() {
       </div>
 
       {/* Learn Mode Banner */}
-      {learnMode && (
+      {learnMode && learnSteps.length > 0 && (
         <div className="bg-red-600 border-t-4 border-red-800 relative z-30 shadow-[0_-10px_40px_rgba(220,38,38,0.2)]">
           <div className="max-w-7xl mx-auto px-6 py-6 flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
             <div className="flex items-start gap-4 flex-1">
@@ -745,14 +718,14 @@ export function BlueprintPlayground() {
                 <BookOpen size={20} className="text-red-700" />
               </div>
               <div>
-                <div className="text-white/80 text-[10px] font-black tracking-widest uppercase mb-1 drop-shadow-md">Step {learnStep + 1} of {LEARN_STEPS.length}</div>
-                <h4 className="text-2xl font-black uppercase text-white drop-shadow-lg leading-tight">{LEARN_STEPS[learnStep]?.title}</h4>
-                <p className="text-sm font-medium text-white/90 mt-2 max-w-3xl leading-relaxed">{LEARN_STEPS[learnStep]?.text}</p>
+                <div className="text-white/80 text-[10px] font-black tracking-widest uppercase mb-1 drop-shadow-md">Step {learnStep + 1} of {learnSteps.length}</div>
+                <h4 className="text-2xl font-black uppercase text-white drop-shadow-lg leading-tight">{learnSteps[learnStep]?.title}</h4>
+                <p className="text-sm font-medium text-white/90 mt-2 max-w-3xl leading-relaxed">{learnSteps[learnStep]?.text}</p>
               </div>
             </div>
             <div className="flex gap-2 shrink-0">
               <button onClick={() => setLearnStep(s => Math.max(0, s - 1))} disabled={learnStep === 0} className="px-5 py-3 bg-black/20 hover:bg-black/40 text-white font-bold text-xs uppercase tracking-wider rounded transition-colors disabled:opacity-30">Prev</button>
-              <button onClick={() => setLearnStep(s => Math.min(LEARN_STEPS.length - 1, s + 1))} disabled={learnStep === LEARN_STEPS.length - 1} className="px-5 py-3 bg-white text-red-700 hover:bg-black hover:text-white font-bold text-xs uppercase tracking-wider rounded shadow-md transition-colors disabled:opacity-30">Next</button>
+              <button onClick={() => setLearnStep(s => Math.min(learnSteps.length - 1, s + 1))} disabled={learnStep === learnSteps.length - 1} className="px-5 py-3 bg-white text-red-700 hover:bg-black hover:text-white font-bold text-xs uppercase tracking-wider rounded shadow-md transition-colors disabled:opacity-30">Next</button>
             </div>
           </div>
         </div>

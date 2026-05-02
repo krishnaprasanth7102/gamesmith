@@ -1,10 +1,11 @@
 "use client";
 
 import { useState, useMemo } from "react";
-import { useCollection, useFirestore } from "@/firebase";
+import { useCollection, useFirestore, useAuth } from "@/firebase";
 import { collection, doc, updateDoc, increment } from "firebase/firestore";
 import { useMemoFirebase } from "@/firebase/firestore/use-memo-firebase";
 import { UploadBossModal } from "@/components/UploadBossModal";
+import { AuthModal } from "@/components/AuthModal";
 import { 
   Download, Terminal, Tag, Archive, Search, SortAsc, 
   ChevronDown, Star, ShoppingCart, Filter, Layers, 
@@ -144,11 +145,13 @@ const CATEGORIES = [
 
 export function OpenBossLibrary() {
   const { firestore } = useFirestore();
+  const { auth } = useAuth();
   const [search, setSearch] = useState("");
   const [activeCategory, setActiveCategory] = useState("All Assets");
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
   const [sortBy, setSortBy] = useState<"newest" | "popular">("popular");
   const [showSort, setShowSort] = useState(false);
+  const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
 
   const bossesQuery = useMemoFirebase(() => {
     if (!firestore) return null;
@@ -197,6 +200,10 @@ export function OpenBossLibrary() {
   }, [bosses, search, activeCategory, sortBy]);
 
   const handleDownload = async (boss: OpenBoss) => {
+    if (!auth?.currentUser) {
+      setIsAuthModalOpen(true);
+      return;
+    }
     setDownloadingId(boss.id);
     try {
       // Only write download count to Firestore for real (non-demo) assets
@@ -404,6 +411,7 @@ export function OpenBossLibrary() {
 
         </main>
       </div>
+      <AuthModal isOpen={isAuthModalOpen} onOpenChange={setIsAuthModalOpen} />
     </div>
   );
 }

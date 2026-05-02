@@ -1,9 +1,10 @@
 
 export const firebaseConfig = {
-  apiKey: "placeholder-api-key",
-  authDomain: "forgotten-arsenal.firebaseapp.com",
-  projectId: "forgotten-arsenal",
-  storageBucket: "forgotten-arsenal.appspot.com",
-  messagingSenderId: "placeholder-sender-id",
-  appId: "placeholder-app-id"
+  apiKey: "AIzaSyDEQp7n4tOf_tjaAvuWr9Hm4bp3-TFzjVE",
+  authDomain: "gamesmith-f717d.firebaseapp.com",
+  projectId: "gamesmith-f717d",
+  storageBucket: "gamesmith-f717d.firebasestorage.app",
+  messagingSenderId: "770457453469",
+  appId: "1:770457453469:web:838f064290afb520ec6574",
+  measurementId: "G-SHHZBPCJ1Y"
 };

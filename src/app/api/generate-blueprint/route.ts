@@ -26,31 +26,74 @@ const CATALOG_INSTRUCTIONS = CATALOG_KEYS.map(key => {
   return `- ${key} (Inputs: ${ins} | Outputs: ${outs})`;
 }).join("\n");
 
+// Simple in-memory rate limiter (5 requests per minute per IP)
+const rateLimitCache = new Map<string, { count: number; resetTime: number }>();
+
+function checkRateLimit(ip: string): boolean {
+  const now = Date.now();
+  const limitInfo = rateLimitCache.get(ip);
+
+  if (!limitInfo || now > limitInfo.resetTime) {
+    rateLimitCache.set(ip, { count: 1, resetTime: now + 60 * 1000 });
+    return true;
+  }
+
+  if (limitInfo.count >= 5) {
+    return false;
+  }
+
+  limitInfo.count += 1;
+  return true;
+}
+
 export async function POST(req: Request) {
   try {
+    const ip = req.headers.get("x-forwarded-for") || "unknown_ip";
+    if (!checkRateLimit(ip)) {
+      return NextResponse.json({ error: 'Too Many Requests. Please wait a minute.' }, { status: 429 });
+    }
+
     const { prompt } = await req.json();
     if (!prompt) return NextResponse.json({ error: 'Prompt is required' }, { status: 400 });
 
     const apiKey = process.env.GOOGLE_GENAI_API_KEY;
     if (!apiKey) throw new Error("Missing Google GenAI API Key");
 
-    const systemInstruction = `You are an expert Unreal Engine Blueprint Architect. 
-Create a fully functional visual logic graph for this boss mechanic prompt: "${prompt}".
+    const systemInstruction = `You are an expert Unreal Engine Blueprint system designer. 
+Your task is to convert Unreal Engine functionality into Blueprint node logic based on the user request.
 
-RULES:
-1. Choose the absolute best node sequence that fits the prompt logic. 
-2. Spread out coordinate (X, Y) roughly 250px apart horizontally for flow. Ensure nodes do not overlap.
-3. Ports MUST match the permitted inputs/outputs for the selected node exactly.
-4. Output strict JSON only.
+USER REQUEST: "${prompt}"
 
-Available Nodes and Ports:
+KNOWLEDGE BASE DATA:
 ${CATALOG_INSTRUCTIONS}
 
-Return a valid JSON object matching exactly this structure:
+INSTRUCTIONS:
+1. Analyze the user request carefully to extract logical flow.
+2. Use ONLY the provided knowledge base data (do not invent unknown nodes).
+3. Convert the functionality into a complete, end-to-end Blueprint node logic chain starting from an entry point (START or EVENT_TICK).
+4. Be precise and practical. Use real Unreal Blueprint concepts.
+
+SPATIAL RULES:
+- Spread out coordinate (X, Y) roughly 300px apart horizontally for flow.
+- Ensure nodes do not overlap.
+
+OUTPUT FORMAT (STRICT JSON ONLY):
 {
-  "nodes": [{ "id": "n1", "type": "START", "x": 0, "y": 0 }, ...],
-  "connections": [{ "id": "c1", "fromNode": "n1", "fromPort": "exec", "toNode": "n2", "toPort": "exec_in" }, ...],
-  "message": "A 1-2 sentence description of the logic generated."
+  "nodes": [
+    { "id": "n1", "type": "NODE_TYPE", "x": 0, "y": 0 }
+  ],
+  "connections": [
+    { "id": "c1", "fromNode": "n1", "fromPort": "PORT_ID", "toNode": "n2", "toPort": "PORT_ID" }
+  ],
+  "message": "A professional summary of the generated logic.",
+  "explanations": [
+    { "nodeId": "n1", "explanation": "Why this node is used here." }
+  ],
+  "tutorial": [
+    "Step 1: ...",
+    "Step 2: ..."
+  ],
+  "unrealBlueprint": "BEGIN OBJECT\\n...\\nEND OBJECT"
 }`;
 
     const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`, {
@@ -60,7 +103,7 @@ Return a valid JSON object matching exactly this structure:
         contents: [{ parts: [{ text: prompt }] }],
         systemInstruction: { parts: [{ text: systemInstruction }] },
         generationConfig: {
-          temperature: 0.8,
+          temperature: 0.1, // Even lower for maximum precision
           responseMimeType: "application/json"
         }
       }),
@@ -77,16 +120,27 @@ Return a valid JSON object matching exactly this structure:
 
     const output = JSON.parse(textOutput);
 
-    // Enrich the AI's simplified node map with full CATALOG metadata
-    const enrichedNodes = output.nodes.map((n: any) => {
-      const def = CATALOG[n.type];
-      return { ...def, id: n.id, x: n.x, y: n.y };
-    });
+    // Enrich the AI's simplified node map with full CATALOG metadata, filtering out hallucinations
+    const enrichedNodes = output.nodes
+      .filter((n: any) => CATALOG[n.type])
+      .map((n: any) => {
+        const def = CATALOG[n.type];
+        return { ...def, id: n.id, x: n.x, y: n.y };
+      });
+
+    // Filter connections to ensure they only reference existing enriched nodes
+    const validNodeIds = new Set(enrichedNodes.map((n: any) => n.id));
+    const validConnections = (output.connections || []).filter((c: any) => 
+      validNodeIds.has(c.fromNode) && validNodeIds.has(c.toNode)
+    );
 
     return NextResponse.json({
         nodes: enrichedNodes,
-        connections: output.connections,
+        connections: validConnections,
         summary: output.message,
+        explanations: output.explanations || [],
+        tutorial: output.tutorial || [],
+        unrealBlueprint: output.unrealBlueprint || ""
     });
   } catch (error: any) {
     console.error('Blueprint Generation Error:', error);

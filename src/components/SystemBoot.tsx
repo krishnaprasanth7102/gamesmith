@@ -49,7 +49,7 @@ export function SystemBoot() {
 
         {/* Main heading */}
         <h1 className="text-[13vw] sm:text-[10vw] md:text-[9vw] font-black leading-none tracking-tighter text-white select-none uppercase mb-6 relative">
-          FORGOTTEN
+          GAMESMITH
         </h1>
         <p className="text-base sm:text-xl md:text-2xl font-medium text-white/50 tracking-wide max-w-3xl mb-4 leading-relaxed">
           The <span className="text-white font-bold">open ecosystem</span> for game enemy AI.{" "}

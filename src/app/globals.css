@@ -1,3 +1,4 @@
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -6,21 +7,21 @@
   :root {
     --background: 0 0% 0%;
     --foreground: 0 0% 100%;
-    --card: 0 0% 0%;
+    --card: 0 0% 2%;
     --card-foreground: 0 0% 100%;
-    --popover: 0 0% 0%;
+    --popover: 0 0% 2%;
     --popover-foreground: 0 0% 100%;
     --primary: 0 100% 50%;
     --primary-foreground: 0 0% 100%;
     --secondary: 0 0% 10%;
     --secondary-foreground: 0 0% 100%;
-    --muted: 0 0% 15%;
-    --muted-foreground: 0 0% 60%;
+    --muted: 0 0% 12%;
+    --muted-foreground: 0 0% 50%;
     --accent: 0 100% 50%;
     --accent-foreground: 0 0% 100%;
     --destructive: 0 100% 50%;
     --destructive-foreground: 0 0% 100%;
-    --border: 0 0% 20%;
+    --border: 0 0% 15%;
     --input: 0 0% 10%;
     --ring: 0 100% 50%;
     --radius: 0rem;
@@ -29,37 +30,60 @@
 
 @layer base {
   * {
-    @apply border-border selection:bg-primary selection:text-white;
+    @apply border-border selection:bg-red-600 selection:text-white;
     cursor: crosshair;
+    box-sizing: border-box;
+  }
+  html {
+    overflow-x: hidden;
+    max-width: 100vw;
   }
   body {
-    @apply bg-background text-foreground overflow-x-hidden;
+    @apply bg-black text-foreground overflow-x-hidden;
     font-variant-numeric: tabular-nums;
     -webkit-font-smoothing: antialiased;
-    -moz-osx-font-smoothing: grayscale;
+    scrollbar-gutter: stable;
+    max-width: 100vw;
+    position: relative;
   }
 }
 
 @layer utilities {
-  .text-shadow-red {
-    text-shadow: 0 0 10px rgba(255, 0, 0, 0.5);
+  .glass {
+    @apply bg-white/5 backdrop-blur-xl border border-white/10;
   }
+  
+  .glass-red {
+    @apply bg-red-950/10 backdrop-blur-xl border border-red-500/20;
+  }
+
+  .text-glow {
+    text-shadow: 0 0 15px rgba(220, 38, 38, 0.5);
+  }
+
   .scanline {
     width: 100%;
     height: 100px;
     z-index: 50;
-    background: linear-gradient(0deg, rgba(255, 0, 0, 0) 0%, rgba(255, 0, 0, 0.05) 50%, rgba(255, 0, 0, 0) 100%);
-    opacity: 0.1;
+    background: linear-gradient(0deg, rgba(220, 38, 38, 0) 0%, rgba(220, 38, 38, 0.05) 50%, rgba(220, 38, 38, 0) 100%);
+    opacity: 0.15;
     position: fixed;
     bottom: 100%;
     left: 0;
     pointer-events: none;
-    animation: scanline 8s linear infinite;
+    animation: scanline 10s linear infinite;
   }
+
+  .noise-bg {
+    background-image: url("https://www.transparenttextures.com/patterns/carbon-fibre.png");
+    background-repeat: repeat;
+  }
+
   .grid-bg {
-    background-image: linear-gradient(rgba(255, 255, 255, 0.03) 1px, transparent 1px),
-      linear-gradient(90deg, rgba(255, 255, 255, 0.03) 1px, transparent 1px);
-    background-size: 40px 40px;
+    background-image: 
+      linear-gradient(rgba(220, 38, 38, 0.05) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(220, 38, 38, 0.05) 1px, transparent 1px);
+    background-size: 50px 50px;
   }
 }
 
@@ -68,21 +92,12 @@
   100% { transform: translateY(200vh); }
 }
 
-@keyframes pulse-red {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.5; }
-}
-
-.animate-pulse-red {
-  animation: pulse-red 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
-}
-
 ::-webkit-scrollbar {
   width: 4px;
 }
 ::-webkit-scrollbar-track {
-  @apply bg-background;
+  @apply bg-black;
 }
 ::-webkit-scrollbar-thumb {
-  @apply bg-muted hover:bg-primary transition-colors;
+  @apply bg-zinc-800 hover:bg-red-600 transition-colors;
 }

@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useEffect } from 'react';
@@ -10,10 +9,14 @@ export function FirebaseErrorListener() {
 
   useEffect(() => {
     const handlePermissionError = (error: any) => {
+      const isPermission = error.name === 'FirestorePermissionError';
+      
       toast({
         variant: 'destructive',
-        title: 'SECURITY_PROTOCOL_BREACH',
-        description: `Access denied for operation: ${error.context.operation} at ${error.context.path}. Check system credentials.`,
+        title: isPermission ? 'SECURITY_PROTOCOL_BREACH' : 'DATABASE_PROTOCOL_FAILURE',
+        description: isPermission 
+          ? `Access denied for operation: ${error.context.operation} at ${error.context.path}. Check system credentials.`
+          : error.message,
       });
     };
 

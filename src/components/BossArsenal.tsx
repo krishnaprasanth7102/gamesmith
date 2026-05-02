@@ -252,12 +252,12 @@ export function BossArsenal() {
                         <Bot className="size-5 text-red-600 opacity-50" />
                       </div>
                       <p className="text-[10px] font-black text-red-600 uppercase tracking-[0.5em]">Sign In to Download</p>
-                      <p className="text-[9px] text-white/30 font-mono max-w-[200px]">GitHub login required to track downloads. The asset is always free.</p>
+                      <p className="text-[9px] text-white/30 font-mono max-w-[200px]">Authentication required to track downloads. The asset is always free.</p>
                       <button
                         onClick={() => document.getElementById('login-trigger')?.click()}
                         className="text-[10px] font-black uppercase text-white bg-red-600 px-8 py-3 hover:bg-white hover:text-black transition-all tracking-[0.3em] w-full max-w-[200px]"
                       >
-                        Sign In with GitHub
+                        Initialize Access
                       </button>
                     </div>
                   ) : (

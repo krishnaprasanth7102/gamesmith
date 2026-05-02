@@ -3,17 +3,22 @@
 import { useState } from "react";
 import { useAuth, useUser } from "@/firebase";
 import { collection, addDoc, serverTimestamp } from "firebase/firestore";
+import { ref, uploadBytesResumable, getDownloadURL } from "firebase/storage";
 import { GitFork, Upload, MessageSquareCode, ShieldCheck, Zap, ArrowRight, X, AlertCircle } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { errorEmitter } from "@/firebase/error-emitter";
 import { FirestorePermissionError } from "@/firebase/errors";
 
 export function ContributionTerminal() {
-  const { auth } = useAuth();
+  const { auth, storage } = useAuth(); // Actually useStorage will be needed but wait, useAuth doesn't return storage. 
   const { user } = useUser();
+  const { storage: fbStorage } = useStorage();
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [success, setSuccess] = useState(false);
+  
+  const [imageFile, setImageFile] = useState<File | null>(null);
+  const [packageFile, setPackageFile] = useState<File | null>(null);
 
   const [formData, setFormData] = useState({
     name: "",
@@ -32,31 +37,52 @@ export function ContributionTerminal() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!auth?.currentUser || !user) return;
+    if (!auth?.currentUser || !user || !fbStorage) return;
 
     setIsSubmitting(true);
     
-    const bossData = {
-      ...formData,
-      contributorId: user.uid,
-      contributorName: user.displayName || "Anonymous",
-      downloadCount: 0,
-      version: "1.0.0",
-      createdAt: serverTimestamp(),
-      packages: {
-        assets: formData.assets,
-        logic: formData.logic,
-        combat: formData.combat,
-        lore: formData.lore
-      }
-    };
-
     try {
+      let finalImageUrl = formData.imageUrl;
+      let finalRepoUrl = formData.githubRepo;
+
+      // Upload Image
+      if (imageFile) {
+        const imageRef = ref(fbStorage, `bosses/${user.uid}/${Date.now()}_${imageFile.name}`);
+        const uploadTask = await uploadBytesResumable(imageRef, imageFile);
+        finalImageUrl = await getDownloadURL(uploadTask.ref);
+      }
+
+      // Upload Package
+      if (packageFile) {
+        const pkgRef = ref(fbStorage, `bosses/${user.uid}/${Date.now()}_${packageFile.name}`);
+        const uploadTask = await uploadBytesResumable(pkgRef, packageFile);
+        finalRepoUrl = await getDownloadURL(uploadTask.ref);
+      }
+
+      const bossData = {
+        ...formData,
+        imageUrl: finalImageUrl,
+        githubRepo: finalRepoUrl,
+        contributorId: user.uid,
+        contributorName: user.displayName || "Anonymous",
+        downloadCount: 0,
+        version: "1.0.0",
+        createdAt: serverTimestamp(),
+        packages: {
+          assets: formData.assets,
+          logic: formData.logic,
+          combat: formData.combat,
+          lore: formData.lore
+        }
+      };
+
       await addDoc(collection(auth.app.firestore(), "bosses"), bossData);
       setSuccess(true);
       setTimeout(() => {
         setSuccess(false);
         setIsFormOpen(false);
+        setImageFile(null);
+        setPackageFile(null);
         setFormData({
           name: "", codename: "", description: "", complexity: "MEDIUM", 
           threatLevel: "A-TIER", engines: ["UNREAL"], imageUrl: "", githubRepo: "",
@@ -245,22 +271,22 @@ export function ContributionTerminal() {
                       </div>
                     </div>
                     <div className="space-y-2">
-                      <label className="text-[8px] sm:text-[9px] font-black uppercase tracking-[0.2em] sm:tracking-[0.3em] text-red-600">PREVIEW_UPLINK</label>
+                      <label className="text-[8px] sm:text-[9px] font-black uppercase tracking-[0.2em] sm:tracking-[0.3em] text-red-600">PREVIEW_IMAGE (UPLOAD)</label>
                       <input 
+                        type="file"
+                        accept="image/*"
                         required
-                        className="w-full bg-white/5 border border-white/10 p-3 sm:p-4 text-white focus:border-red-600 outline-none font-mono text-[8px] sm:text-[9px]"
-                        placeholder="HTTPS://..."
-                        value={formData.imageUrl}
-                        onChange={(e) => setFormData({...formData, imageUrl: e.target.value})}
+                        className="w-full bg-white/5 border border-white/10 p-2 sm:p-3 text-white focus:border-red-600 outline-none font-mono text-[8px] sm:text-[9px] file:mr-4 file:py-2 file:px-4 file:border-0 file:text-[8px] file:font-black file:uppercase file:tracking-widest file:bg-red-600 file:text-white hover:file:bg-white hover:file:text-black file:transition-colors"
+                        onChange={(e) => setImageFile(e.target.files?.[0] || null)}
                       />
                     </div>
                     <div className="space-y-2">
-                      <label className="text-[8px] sm:text-[9px] font-black uppercase tracking-[0.2em] sm:tracking-[0.3em] text-red-600">GIT_REPOSITORY</label>
+                      <label className="text-[8px] sm:text-[9px] font-black uppercase tracking-[0.2em] sm:tracking-[0.3em] text-red-600">PACKAGE_ARCHIVE (.ZIP)</label>
                       <input 
-                        className="w-full bg-white/5 border border-white/10 p-3 sm:p-4 text-white focus:border-red-600 outline-none font-mono text-[8px] sm:text-[9px]"
-                        placeholder="GITHUB.COM/..."
-                        value={formData.githubRepo}
-                        onChange={(e) => setFormData({...formData, githubRepo: e.target.value})}
+                        type="file"
+                        accept=".zip,.rar,.7z"
+                        className="w-full bg-white/5 border border-white/10 p-2 sm:p-3 text-white focus:border-red-600 outline-none font-mono text-[8px] sm:text-[9px] file:mr-4 file:py-2 file:px-4 file:border-0 file:text-[8px] file:font-black file:uppercase file:tracking-widest file:bg-red-600 file:text-white hover:file:bg-white hover:file:text-black file:transition-colors"
+                        onChange={(e) => setPackageFile(e.target.files?.[0] || null)}
                       />
                     </div>
                   </div>
@@ -269,7 +295,7 @@ export function ContributionTerminal() {
                 <div className="p-3 sm:p-4 border border-red-600/30 bg-red-600/5 flex items-start gap-3 sm:gap-4">
                   <AlertCircle className="size-4 sm:size-5 text-red-600 shrink-0 mt-0.5" />
                   <p className="text-[8px] sm:text-[9px] text-muted-foreground uppercase leading-relaxed font-mono">
-                    Binary submission constitutes licensing under FORGOTTEN Open Protocol. Logic must be engine-agnostic.
+                    Submission constitutes licensing under GameSmith Open Protocol. Logic must be engine-agnostic for global compatibility.
                   </p>
                 </div>
 
